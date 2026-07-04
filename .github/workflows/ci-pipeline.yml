@@ -16,5 +16,4 @@ jobs:
       run: docker-compose up -d --build
 
     - name: Menjalankan Pengujian (Pytest)
-      # Parameter -T digunakan agar docker-compose exec bisa berjalan di lingkungan CI (non-interaktif)
       run: docker-compose exec -T web pytest -v
