@@ -1,0 +1,42 @@
+name: Backend Continuous Integration
+
+# Pipeline ini akan berjalan otomatis saat ada 'push' atau 'pull request' ke branch main
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Mengambil kode dari repositori
+    - name: Checkout Source Code
+      uses: actions/checkout@v3
+
+    # 2. Menyiapkan environment Python
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+
+    # 3. Menginstal dependensi proyek
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    # 4. Menjalankan Flake8 untuk analisis sintaks dan gaya penulisan
+    - name: Run Linter (Flake8)
+      run: |
+        # Menghentikan proses jika ada syntax error atau undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Peringatan gaya penulisan (exit-zero berarti tidak menggagalkan pipeline)
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    # 5. Menjalankan Unit Test
+    - name: Run Unit Tests (Pytest)
+      run: |
+        pytest -v

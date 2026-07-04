@@ -1,0 +1,51 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy # <--- FastAPI akan menunggu sampai DB sehat
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://postgres:rahasia@db:5432/postgres
+
+  worker:
+    build: .
+    command: python worker_simulasi.py
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://postgres:rahasia@db:5432/postgres
+
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: rahasia
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    # Menambahkan pengecekan otomatis setiap 5 detik
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
