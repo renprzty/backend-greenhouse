@@ -13,7 +13,9 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Membangun dan Menjalankan Kontainer
-      run: docker-compose up -d --build
+      # Menggunakan spasi (Docker Compose V2)
+      run: docker compose up -d --build
 
     - name: Menjalankan Pengujian (Pytest)
-      run: docker-compose exec -T web pytest -v
+      # Menggunakan spasi (Docker Compose V2)
+      run: docker compose exec -T web pytest -v
