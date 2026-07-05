@@ -13,9 +13,12 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Membangun dan Menjalankan Kontainer
-      # Menggunakan spasi (Docker Compose V2)
       run: docker compose up -d --build
 
+    - name: Periksa Status dan Log Kontainer
+      run: |
+        docker compose ps
+        docker compose logs web
+
     - name: Menjalankan Pengujian (Pytest)
-      # Menggunakan spasi (Docker Compose V2)
       run: docker compose exec -T web pytest -v
