@@ -12,10 +12,20 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
+    - name: Buat file .env untuk Pengujian
+      run: |
+        touch .env
+        echo "DATABASE_URL=postgresql://postgres:rahasia@db:5432/postgres" >> .env
+        # Tambahkan variabel lain yang dibutuhkan oleh main.py di sini (contoh: RABBITMQ_URL, REDIS_URL)
+
     - name: Membangun dan Menjalankan Kontainer
       run: docker compose up -d --build
 
-    - name: Periksa Status dan Log Kontainer
+    - name: Tunggu Layanan Stabil
+      # Menambahkan jeda waktu 10 detik agar RabbitMQ/Redis benar-benar siap
+      run: sleep 10
+
+    - name: Periksa Status dan Log Kontainer (Untuk Debugging)
       run: |
         docker compose ps
         docker compose logs web
