@@ -1,14 +1,22 @@
 import math
 import pika
-from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy.orm import Session
 import models
 import schemas
-from database import engine, get_db
 import redis
 import json
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import auth
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.orm import Session
+from database import engine, get_db
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from fastapi import Request
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 models.Base.metadata.create_all(bind=engine)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
@@ -68,7 +76,8 @@ def create_sensor(
 # ... (Endpoint /sensor/{sensor_id} dan /readings dari Hari sebelumnya tetap biarkan di bawah)
 
 @app.post("/register", status_code=201)
-def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register_user(request: Request,user: schemas.UserCreate, db: Session = Depends(get_db)):
     # 1. Cek apakah username sudah dipakai
     user_exists = db.query(models.User).filter(models.User.username == user.username).first()
     if user_exists:

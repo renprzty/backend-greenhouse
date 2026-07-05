@@ -32,8 +32,8 @@ class PaginatedReadings(BaseModel):
     data: List[ReadingResponse]
     
 class UserCreate(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_]+$")
+    password: str = Field(..., min_length=8)
     role: Optional[str] = "researcher" # Default sebagai researcher untuk analisis data
 
 class Token(BaseModel):
