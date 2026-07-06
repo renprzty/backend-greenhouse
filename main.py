@@ -13,6 +13,11 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi import Request
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from auth import verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from auth import get_password_hash
+from datetime import timedelta
 
 
 models.Base.metadata.create_all(bind=engine)
@@ -23,6 +28,8 @@ app = FastAPI()
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # Koneksi ke Redis Server (Port default Redis adalah 6379)
 redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
@@ -78,32 +85,45 @@ def create_sensor(
 
 @app.post("/register", status_code=201)
 @limiter.limit("5/minute")
-def register_user(request: Request,user: schemas.UserCreate, db: Session = Depends(get_db)):
-    # 1. Cek apakah username sudah dipakai
-    user_exists = db.query(models.User).filter(models.User.username == user.username).first()
-    if user_exists:
+def register_user(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):
+    # Cek duplikasi pengguna
+    db_user = db.query(models.User).filter(models.User.username == user.username).first()
+    if db_user:
         raise HTTPException(status_code=400, detail="Username sudah terdaftar")
     
-    # 2. Acak password menjadi hash
-    hashed_password = auth.get_password_hash(user.password)
+    # Enkripsi kata sandi menggunakan Bcrypt
+    hashed_password = get_password_hash(user.password)
     
-    # 3. Simpan ke PostgreSQL
-    db_user = models.User(username=user.username, hashed_password=hashed_password, role=user.role)
-    db.add(db_user)
+    # Simpan password yang sudah di-hash
+    new_user = models.User(username=user.username, password=hashed_password)
+    db.add(new_user)
     db.commit()
-    return {"pesan": "Akun berhasil dibuat"}
+    db.refresh(new_user)
+    
+    return {"message": "User berhasil dibuat", "username": new_user.username}
 
 @app.post("/login", response_model=schemas.Token)
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # 1. Cari user di database
+def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: Session = Depends(get_db)
+):
+    # Cari pengguna berdasarkan username (Sesuaikan query ini dengan model database Anda)
     user = db.query(models.User).filter(models.User.username == form_data.username).first()
     
-    # 2. Validasi kelayakan (User ada & password cocok)
-    if not user or not auth.verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Username atau password salah")
+    # Verifikasi keberadaan pengguna dan kecocokan kata sandi
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Username atau password salah",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
-    # 3. Cetak tiket JWT
-    access_token = auth.create_access_token(data={"sub": user.username, "role": user.role})
+    # Buat token jika valid
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    
     return {"access_token": access_token, "token_type": "bearer"}
 
 # Endpoint untuk mengambil data satu sensor berdasarkan ID-nya
@@ -234,3 +254,29 @@ def get_paginated_readings(
         "data": readings
     }
     
+@app.get("/secure-data")
+def read_secure_data(token: str = Depends(oauth2_scheme)):
+    # Jika token tidak disertakan atau tidak valid, FastAPI otomatis menolak akses
+    return {"message": "Ini adalah data rahasia", "token_anda": token}
+
+@app.post("/api/v1/sensors/ingest", status_code=status.HTTP_202_ACCEPTED)
+async def ingest_sensor_data(
+    payload: schemas.SensorDataIncoming,
+    token: str = Depends(oauth2_scheme) 
+):
+    # Logika sementara: Mencatat penerimaan data di terminal.
+    # Pada Fase 3, blok ini akan digantikan dengan perintah untuk 
+    # mendelegasikan payload ke RabbitMQ/Celery secara asinkron.
+    print(
+        f"[{payload.timestamp}] Data dari {payload.device_id} | "
+        f"Suhu: {payload.temperature}°C | Kelembapan: {payload.humidity}% | "
+        f"Cahaya: {payload.light_intensity} lux | Status: {payload.sensor_status}"
+    )
+    
+    # Merespons secepat mungkin dengan status 202 (Accepted) 
+    # yang berarti permintaan telah diterima untuk diproses lebih lanjut.
+    return {
+        "status": "accepted",
+        "message": "Payload berhasil diterima dan masuk antrean pemrosesan",
+        "device_id": payload.device_id
+    }

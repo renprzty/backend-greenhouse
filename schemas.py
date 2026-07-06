@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 from typing import List
+from datetime import datetime
 
 # Schema untuk mendefinisikan aturan saat membuat SENSOR baru
 class SensorCreate(BaseModel):
@@ -39,3 +40,13 @@ class UserCreate(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class TokenData(BaseModel):
+    username: str | None = None
+class SensorDataIncoming(BaseModel):
+    device_id: str
+    temperature: float
+    humidity: float
+    light_intensity: float
+    sensor_status: str
+    timestamp: datetime = datetime.now()
